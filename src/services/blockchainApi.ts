@@ -6,8 +6,8 @@ const NETWORK_LATENCY_MS = 160;
 
 /**
  * Contrato con el backend Go:
- *   GET  {VITE_API_BASE_URL}/api/v1/chain   -> { blocks: Block[] }
- *   POST {VITE_API_BASE_URL}/api/v1/blocks  -> Block
+ *   GET  {VITE_API_BASE_URL}/v1/chain   -> { blocks: Block[] }
+ *   POST {VITE_API_BASE_URL}/v1/blocks  -> Block
  *        body: { prev, height }
  *
  * Block = { header: { prev, miner, height, nonce }, signatures: { signer, satoshiId }[], hash, verified }
@@ -39,7 +39,7 @@ export async function fetchChainSnapshot(): Promise<ChainSnapshot> {
     return readMockSnapshot();
   }
 
-  const response = await fetch(`${base}/api/v1/chain`);
+  const response = await fetch(`${base}/v1/chain`);
   if (!response.ok) throw new Error("El backend no devolvió la cadena");
   return (await response.json()) as ChainSnapshot;
 }
@@ -55,7 +55,7 @@ export async function requestNextBlock(previous: Block, config: ChainConfig): Pr
     prev: previous.hash,
     height: previous.header.height,
   };
-  const response = await fetch(`${base}/api/v1/blocks`, {
+  const response = await fetch(`${base}/v1/blocks`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
