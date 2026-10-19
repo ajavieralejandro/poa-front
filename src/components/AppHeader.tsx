@@ -25,7 +25,7 @@ export function AppHeader({ status, height, source }: AppHeaderProps) {
           <MarkIcon className="size-7" />
         </span>
         <div>
-          <p className="text-[11px] tracking-[0.18em] text-mute uppercase">Proof of Authority</p>
+          <p className="text-[11px] tracking-[0.18em] text-mute uppercase">Proof of Activity</p>
           <h1 className="font-serif text-3xl leading-none text-ink sm:text-4xl">Follow the Satoshi</h1>
         </div>
       </div>

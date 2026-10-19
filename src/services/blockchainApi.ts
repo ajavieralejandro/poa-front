@@ -1,5 +1,4 @@
 import rawChain from "../data/mockChain.json" with { type: "json" };
-import { readAppConfig, type DataSource } from "../config/env.ts";
 import { mineBlock } from "./consensus.ts";
 import type { Block, ChainConfig, ChainSnapshot, MineRequest } from "../types/blockchain.ts";
 
@@ -7,23 +6,20 @@ const NETWORK_LATENCY_MS = 160;
 
 /**
  * Contrato con el backend Go:
- *   GET {VITE_API_BASE_URL}/api/v1/chain  -> { blocks, supply, difficulty }
- *   GET {VITE_API_BASE_URL}/api/v1/stream -> text/event-stream, evento `block`
+ *   GET  {VITE_API_BASE_URL}/v1/chain   -> { blocks: Block[] }
+ *   POST {VITE_API_BASE_URL}/v1/blocks  -> Block
+ *        body: { prev, height }
  *
+ * Block = { header: { prev, miner, height, nonce }, signatures: { signer, satoshiId }[], hash, verified }
  * Sin `VITE_API_BASE_URL` se usa el JSON local y el minado simulado.
  */
 function apiBase(): string {
-  return readAppConfig().apiBaseUrl;
+  const configured = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
+  return configured.replace(/\/$/, "");
 }
 
-export function chainDataSource(): DataSource {
-  return readAppConfig().dataSource;
-}
-
-export function blockStreamURL(): string | null {
-  const base = apiBase();
-  if (!base) return null;
-  return `${base}/api/v1/stream`;
+export function chainDataSource(): "mock" | "api" {
+  return apiBase() ? "api" : "mock";
 }
 
 function wait(ms: number): Promise<void> {
@@ -43,7 +39,7 @@ export async function fetchChainSnapshot(): Promise<ChainSnapshot> {
     return readMockSnapshot();
   }
 
-  const response = await fetch(`${base}/api/v1/chain`);
+  const response = await fetch(`${base}/v1/chain`);
   if (!response.ok) throw new Error("El backend no devolvió la cadena");
   return (await response.json()) as ChainSnapshot;
 }
@@ -59,7 +55,7 @@ export async function requestNextBlock(previous: Block, config: ChainConfig): Pr
     prev: previous.hash,
     height: previous.header.height,
   };
-  const response = await fetch(`${base}/api/v1/blocks`, {
+  const response = await fetch(`${base}/v1/blocks`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
