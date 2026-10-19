@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readAppConfig } from "../config/env.ts";
 import { fetchChainSnapshot, requestNextBlock } from "../services/blockchainApi.ts";
 import { POA_NETWORK } from "../services/consensus.ts";
 import type { Block, ChainConfig, ChainSnapshot } from "../types/blockchain.ts";
+import { useBlockStream } from "./useBlockStream.ts";
 
 export type SimulationStatus = "loading" | "paused" | "running" | "error";
 
+function configFrom(snapshot: ChainSnapshot): ChainConfig {
+  return {
+    ...POA_NETWORK,
+    totalSupply: snapshot.supply ?? POA_NETWORK.totalSupply,
+    difficulty: snapshot.difficulty ?? POA_NETWORK.difficulty,
+  };
+}
+
 export function useBlockchainSimulation() {
+  const dataSource = readAppConfig().dataSource;
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [config, setConfig] = useState<ChainConfig | null>(null);
   const [status, setStatus] = useState<SimulationStatus>("loading");
@@ -17,20 +28,43 @@ export function useBlockchainSimulation() {
   const configRef = useRef<ChainConfig | null>(null);
   const intervalRef = useRef(intervalMs);
   const runId = useRef(0);
+  const resyncing = useRef(false);
+  const statusRef = useRef<SimulationStatus>(status);
 
   const publish = useCallback((snapshot: ChainSnapshot) => {
+    const nextConfig = configFrom(snapshot);
     blocksRef.current = snapshot.blocks;
-    configRef.current = POA_NETWORK;
+    configRef.current = nextConfig;
     setBlocks(snapshot.blocks);
-    setConfig(POA_NETWORK);
+    setConfig(nextConfig);
     setEpoch((value) => value + 1);
     setError(null);
-    setStatus("paused");
+    setStatus(readAppConfig().dataSource === "api" ? "running" : "paused");
   }, []);
 
   const fail = useCallback((err: unknown) => {
     setError(err instanceof Error ? err.message : "No se pudo cargar la cadena");
     setStatus("error");
+  }, []);
+
+  const resync = useCallback(() => {
+    if (resyncing.current) return;
+    resyncing.current = true;
+    fetchChainSnapshot()
+      .then((snapshot) => {
+        const nextConfig = configFrom(snapshot);
+        blocksRef.current = snapshot.blocks;
+        configRef.current = nextConfig;
+        setBlocks(snapshot.blocks);
+        setConfig(nextConfig);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "No se pudo sincronizar la cadena");
+      })
+      .finally(() => {
+        resyncing.current = false;
+      });
   }, []);
 
   useEffect(() => {
@@ -55,8 +89,40 @@ export function useBlockchainSimulation() {
     };
   }, [fail, publish]);
 
+  useBlockStream(dataSource === "api" && status === "running", {
+    onBlock: (block) => {
+      const current = blocksRef.current;
+      if (current.some((item) => item.hash === block.hash)) return;
+
+      const tip = current.at(-1);
+      if (tip && (block.header.prev !== tip.hash || block.header.height <= tip.header.height)) {
+        resync();
+        return;
+      }
+
+      const updated = [...current, block];
+      blocksRef.current = updated;
+      setBlocks(updated);
+      setError(null);
+    },
+    onOpen: () => {
+      setError((current) => (current?.includes("stream") ? null : current));
+    },
+    onError: () => {
+      setError((current) => current ?? "Se interrumpió el stream de bloques. Reintentando…");
+    },
+  });
+
   useEffect(() => {
-    if (status !== "running") return;
+    const previous = statusRef.current;
+    statusRef.current = status;
+    if (dataSource === "api" && previous === "paused" && status === "running") {
+      resync();
+    }
+  }, [dataSource, resync, status]);
+
+  useEffect(() => {
+    if (dataSource === "api" || status !== "running") return;
 
     const epochId = runId.current;
     let active = true;
@@ -108,7 +174,7 @@ export function useBlockchainSimulation() {
       if (timer !== undefined) window.clearTimeout(timer);
       releaseWait();
     };
-  }, [status]);
+  }, [dataSource, status]);
 
   const play = useCallback(() => {
     if (blocksRef.current.length === 0 || !configRef.current) return;

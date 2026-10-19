@@ -1,4 +1,5 @@
 import rawChain from "../data/mockChain.json" with { type: "json" };
+import { readAppConfig, type DataSource } from "../config/env.ts";
 import { mineBlock } from "./consensus.ts";
 import type { Block, ChainConfig, ChainSnapshot, MineRequest } from "../types/blockchain.ts";
 
@@ -6,20 +7,23 @@ const NETWORK_LATENCY_MS = 160;
 
 /**
  * Contrato con el backend Go:
- *   GET  {VITE_API_BASE_URL}/api/v1/chain   -> { blocks: Block[] }
- *   POST {VITE_API_BASE_URL}/api/v1/blocks  -> Block
- *        body: { prev, height }
+ *   GET {VITE_API_BASE_URL}/api/v1/chain  -> { blocks, supply, difficulty }
+ *   GET {VITE_API_BASE_URL}/api/v1/stream -> text/event-stream, evento `block`
  *
- * Block = { header: { prev, miner, height, nonce }, signatures: { signer, satoshiId }[], hash, verified }
  * Sin `VITE_API_BASE_URL` se usa el JSON local y el minado simulado.
  */
 function apiBase(): string {
-  const configured = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
-  return configured.replace(/\/$/, "");
+  return readAppConfig().apiBaseUrl;
 }
 
-export function chainDataSource(): "mock" | "api" {
-  return apiBase() ? "api" : "mock";
+export function chainDataSource(): DataSource {
+  return readAppConfig().dataSource;
+}
+
+export function blockStreamURL(): string | null {
+  const base = apiBase();
+  if (!base) return null;
+  return `${base}/api/v1/stream`;
 }
 
 function wait(ms: number): Promise<void> {

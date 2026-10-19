@@ -33,7 +33,12 @@ export interface ChainConfig {
 /** Respuesta de `GET /api/v1/chain`. */
 export interface ChainSnapshot {
   blocks: Block[];
+  supply?: number;
+  difficulty?: number;
 }
+
+/** Evento `block` de `GET /api/v1/stream`. */
+export type StreamedBlock = Block;
 
 /** Cuerpo de `POST /api/v1/blocks`. `height` es la altura del bloque anterior. */
 export interface MineRequest {
