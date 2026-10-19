@@ -31,6 +31,8 @@ export default function App() {
             config={simulation.config}
             height={height}
             error={simulation.error}
+            pending={simulation.pending}
+            meta={simulation.meta}
           />
           <ChainView
             key={simulation.epoch}

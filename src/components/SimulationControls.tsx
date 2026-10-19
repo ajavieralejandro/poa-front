@@ -1,7 +1,9 @@
-import type { SimulationStatus } from "../hooks/useBlockchainSimulation.ts";
+import type { DemoMeta, PendingControl, SimulationStatus } from "../hooks/useBlockchainSimulation.ts";
 import type { ChainConfig } from "../types/blockchain.ts";
 import { formatNumber, formatSeconds } from "../utils/format.ts";
 import { PauseIcon, PlayIcon, ResetIcon } from "./icons.tsx";
+
+const LIMIT_MESSAGE = "Límite de la demo alcanzado. Reiniciá para comenzar otra ejecución.";
 
 interface SimulationControlsProps {
   status: SimulationStatus;
@@ -13,6 +15,8 @@ interface SimulationControlsProps {
   config: ChainConfig | null;
   height: number;
   error: string | null;
+  pending: PendingControl;
+  meta: DemoMeta;
 }
 
 export function SimulationControls({
@@ -25,10 +29,15 @@ export function SimulationControls({
   config,
   height,
   error,
+  pending,
+  meta,
 }: SimulationControlsProps) {
   const running = status === "running";
+  const busy = pending !== null || status === "loading";
   const supply = config?.totalSupply ?? 1000;
   const difficulty = config?.difficulty;
+  const shared = meta.maxBlocks !== null;
+  const blockCount = meta.blockCount;
 
   return (
     <aside className="rounded-md border border-line bg-ivory px-4 py-4 shadow-[0_10px_24px_rgba(42,37,30,0.06)]">
@@ -38,31 +47,34 @@ export function SimulationControls({
         <button
           type="button"
           onClick={onPlay}
-          disabled={status !== "paused"}
+          disabled={busy || status !== "paused" || meta.limitReached}
           aria-pressed={running}
+          aria-busy={pending === "start"}
           className="inline-flex items-center justify-center gap-2 rounded-md bg-olive px-3 py-2.5 text-sm text-parchment transition hover:bg-moss focus-visible:ring-2 focus-visible:ring-gold/60 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
         >
           <PlayIcon className="size-4" />
-          Iniciar simulación
+          {pending === "start" ? "Iniciando…" : "Iniciar simulación"}
         </button>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={onPause}
-            disabled={!running}
+            disabled={busy || !running}
+            aria-busy={pending === "pause"}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-gold/40 px-3 py-2 text-sm text-gold transition hover:bg-gold/10 focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
           >
             <PauseIcon className="size-4" />
-            Pausar
+            {pending === "pause" ? "Pausando…" : "Pausar"}
           </button>
           <button
             type="button"
             onClick={onReset}
-            disabled={status === "loading"}
+            disabled={busy}
+            aria-busy={pending === "reset"}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-ink transition hover:border-gold/40 focus-visible:ring-2 focus-visible:ring-gold/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ResetIcon className="size-4" />
-            Reiniciar
+            {pending === "reset" ? "Reiniciando…" : "Reiniciar"}
           </button>
         </div>
       </div>
@@ -81,19 +93,34 @@ export function SimulationControls({
           max={5000}
           step={100}
           value={intervalMs}
-          disabled={status === "loading"}
+          disabled={busy || shared}
           onChange={(event) => onIntervalChange(Number(event.target.value))}
           className="mt-3 h-1 w-full cursor-pointer appearance-none rounded-full bg-line accent-gold disabled:cursor-not-allowed"
         />
       </div>
 
       <dl className="mt-6 space-y-3 border-t border-line pt-5">
-        <Metric label="Supply" value={formatNumber(supply)} />
+        {shared ? (
+          <Metric label="Supply" value={`${formatNumber(supply)} satoshis`} />
+        ) : (
+          <Metric label="Supply" value={formatNumber(supply)} />
+        )}
+        {shared && meta.maxBlocks !== null && (
+          <>
+            <Metric label="Máximo" value={`${formatNumber(meta.maxBlocks)} bloques`} />
+            <Metric label="Bloques" value={`${formatNumber(blockCount ?? 0)} / ${formatNumber(meta.maxBlocks)}`} />
+          </>
+        )}
         <Metric label="Dificultad" value={difficulty === undefined ? "—" : String(difficulty)} />
         <Metric label="Altura" value={config ? formatNumber(height) : "—"} />
       </dl>
 
-      {error && status !== "loading" && (
+      {meta.limitReached && (
+        <p role="status" className="mt-4 text-xs text-[#8a4b3c]">
+          {LIMIT_MESSAGE}
+        </p>
+      )}
+      {error && status !== "loading" && error !== LIMIT_MESSAGE && (
         <p role="alert" className="mt-4 text-xs text-[#8a4b3c]">
           {error}
         </p>

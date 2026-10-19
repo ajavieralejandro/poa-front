@@ -1,9 +1,22 @@
-import type { Block } from "../types/blockchain.ts";
+import type { Block, ChainStatus } from "../types/blockchain.ts";
 
 export interface BlockStreamHandlers {
   onBlock: (block: Block) => void;
+  onStatus?: (status: ChainStatus) => void;
   onOpen?: () => void;
   onError?: () => void;
+}
+
+function isStatus(value: unknown): value is ChainStatus {
+  if (!value || typeof value !== "object") return false;
+  const status = value as Partial<ChainStatus>;
+  return (
+    (status.status === "paused" || status.status === "running") &&
+    typeof status.generation === "number" &&
+    typeof status.blockCount === "number" &&
+    typeof status.maxBlocks === "number" &&
+    typeof status.limitReached === "boolean"
+  );
 }
 
 function isBlock(value: unknown): value is Block {
@@ -34,7 +47,18 @@ export function openBlockStream(url: string, handlers: BlockStreamHandlers): () 
     }
   };
 
+  const onStatus = (event: Event) => {
+    try {
+      const parsed: unknown = JSON.parse((event as MessageEvent<string>).data);
+      if (!isStatus(parsed)) return;
+      handlers.onStatus?.(parsed);
+    } catch {
+      handlers.onError?.();
+    }
+  };
+
   source.addEventListener("block", onBlock);
+  source.addEventListener("status", onStatus);
   source.onopen = () => {
     handlers.onOpen?.();
   };
@@ -44,6 +68,7 @@ export function openBlockStream(url: string, handlers: BlockStreamHandlers): () 
 
   return () => {
     source.removeEventListener("block", onBlock);
+    source.removeEventListener("status", onStatus);
     source.close();
   };
 }

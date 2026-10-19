@@ -21,6 +21,10 @@ export function useBlockStream(enabled: boolean, handlers: BlockStreamHandlers) 
         if (!alive) return;
         handlersRef.current.onBlock(block);
       },
+      onStatus: (status) => {
+        if (!alive) return;
+        handlersRef.current.onStatus?.(status);
+      },
       onOpen: () => {
         if (!alive) return;
         handlersRef.current.onOpen?.();
